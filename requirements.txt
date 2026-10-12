@@ -1,7 +1,12 @@
+# Core Data Analysis & Big Data Analytics
 pandas
 numpy
+
+# Visualization & Reporting
 matplotlib
 seaborn
 reportlab
+
+# Web Backend API (SQLite is provided via Python standard library: sqlite3)
 fastapi
 uvicorn

@@ -14,6 +14,7 @@ from src.preprocessing import load_and_clean, dataset_summary
 from src.bloom_filter import BloomFilter
 from src.flajolet_martin import run_cardinality_comparison
 from src.analysis import run_all as run_analysis
+from src.database import DEFAULT_DB_PATH, init_db, import_titles, query_titles, get_titles_count
 
 app = FastAPI(
     title="Netflix BDA Analytics API",
@@ -31,6 +32,7 @@ app.add_middleware(
 )
 
 DATA_PATH = os.path.join(BASE_DIR, 'data', 'netflix_titles.csv')
+DB_PATH = DEFAULT_DB_PATH
 REPORT_PATH = os.path.join(BASE_DIR, 'output', 'netflix_report.pdf')
 
 # Global cache for preprocessed data and models
@@ -59,6 +61,10 @@ def get_data():
             
         # Compute Cardinality comparison (runs actual FM single, multi, and HLL)
         cardinality_data = run_cardinality_comparison(titles)
+        
+        # Ensure SQLite database is initialized and populated with cleaned data
+        if get_titles_count(DB_PATH) == 0:
+            import_titles(df, DB_PATH)
         
         data_cache["df"] = df
         data_cache["titles"] = titles
@@ -238,45 +244,16 @@ def get_titles(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(15, ge=1, le=100, description="Items per page")
 ):
-    data = get_data()
-    df = data["df"]
-    
-    filtered_df = df
-    
-    if search:
-        search_lower = search.strip().lower()
-        filtered_df = filtered_df[filtered_df['title'].str.lower().str.contains(search_lower, na=False)]
-        
-    if type and type.lower() != 'all':
-        filtered_df = filtered_df[filtered_df['type'].str.lower() == type.lower()]
-        
-    if country and country.lower() != 'all':
-        filtered_df = filtered_df[filtered_df['country'].str.lower().str.contains(country.lower(), na=False)]
-        
-    if genre and genre.lower() != 'all':
-        filtered_df = filtered_df[filtered_df['listed_in'].str.lower().str.contains(genre.lower(), na=False)]
-        
-    total_items = len(filtered_df)
-    total_pages = max(1, (total_items + limit - 1) // limit)
-    
-    # Pagination slicing
-    start_idx = (page - 1) * limit
-    end_idx = start_idx + limit
-    page_items = filtered_df.iloc[start_idx:end_idx]
-    
-    # Convert records to JSON-friendly dicts
-    columns = ['show_id', 'type', 'title', 'director', 'country', 'release_year', 'rating', 'duration', 'listed_in', 'description']
-    existing_cols = [c for c in columns if c in page_items.columns]
-    
-    records = page_items[existing_cols].fillna('').to_dict(orient='records')
-    
-    return {
-        "page": page,
-        "limit": limit,
-        "total_items": total_items,
-        "total_pages": total_pages,
-        "items": records
-    }
+    get_data()
+    return query_titles(
+        db_path=DB_PATH,
+        search=search,
+        content_type=type,
+        country=country,
+        genre=genre,
+        page=page,
+        limit=limit
+    )
 
 @app.get("/api/report/status")
 def report_status():

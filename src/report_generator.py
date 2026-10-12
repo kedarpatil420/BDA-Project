@@ -213,13 +213,16 @@ def _chapter1(styles: dict) -> list:
 
     story.append(Paragraph('Tools and Technologies', S['section_title']))
     tools = [
-        '<b>Python 3.x</b>  — primary programming language',
-        '<b>Pandas</b>      — data ingestion, cleaning, and manipulation',
-        '<b>NumPy</b>       — numerical computations',
-        '<b>Matplotlib / Seaborn</b> — data visualisation',
-        '<b>hashlib</b>     — SHA-256 and MD5 hashing for BDA algorithms',
-        '<b>ReportLab</b>   — automated PDF report generation',
-        '<b>Custom classes</b> — BloomFilter, FlajoletMartin, HyperLogLog',
+        '<b>Python 3.x</b> — Primary programming language and analytics pipeline',
+        '<b>Pandas and NumPy</b> — Data preprocessing, manipulation, and numerical computation',
+        '<b>R (4.6.1), ggplot2, dplyr, readr</b> — Report data visualization',
+        '<b>React and Vite</b> — Frontend development and build tooling',
+        '<b>CSS</b> — Frontend styling and Neo-Brutalist design',
+        '<b>Recharts and Lucide React</b> — Interactive charts and interface icons',
+        '<b>FastAPI and Uvicorn</b> — Backend REST API',
+        '<b>hashlib (SHA-256 and MD5)</b> — Hashing for probabilistic algorithms',
+        '<b>ReportLab</b> — Automated PDF report generation',
+        '<b>Custom Python classes</b> — Bloom Filter, Flajolet–Martin, and HyperLogLog',
     ]
     for t in tools:
         story.append(Paragraph(f'\u2022 {t}', S['bullet']))

@@ -14,26 +14,33 @@ Output:
 
 import os
 import sys
+import subprocess
 
 # ------------------------------------------------------------------ #
 # Ensure src/ is importable
 # ------------------------------------------------------------------ #
-sys.path.insert(0, os.path.dirname(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from src.preprocessing   import load_and_clean, dataset_summary
 from src.bloom_filter    import run_bloom_filter_demo
 from src.flajolet_martin import run_cardinality_comparison
 from src.analysis        import run_all as run_analysis
-from src.visualizations  import generate_all as generate_figures
 from src.report_generator import generate_report
+from src.database        import DEFAULT_DB_PATH, import_titles
 
 # ------------------------------------------------------------------ #
 # Paths
 # ------------------------------------------------------------------ #
-DATA_PATH    = os.path.join('data', 'netflix_titles.csv')
-OUTPUT_DIR   = 'output'
+DATA_PATH    = os.path.join(PROJECT_ROOT, 'data', 'netflix_titles.csv')
+DB_PATH      = DEFAULT_DB_PATH
+OUTPUT_DIR   = os.path.join(PROJECT_ROOT, 'output')
 FIGURES_DIR  = os.path.join(OUTPUT_DIR, 'figures')
 REPORT_PATH  = os.path.join(OUTPUT_DIR, 'netflix_report.pdf')
+CLEANED_DATA_PATH = os.path.join(OUTPUT_DIR, 'cleaned_netflix_titles.csv')
+RSCRIPT_PATH = r"C:/Program Files/R/R-4.6.1/bin/Rscript.exe"
+
 
 
 def print_section(n: int, title: str):
@@ -54,6 +61,10 @@ def main():
     print_section(1, 'Preprocessing data')
     df = load_and_clean(DATA_PATH)
     summary = dataset_summary(df)
+
+    # Initialize / update SQLite database with cleaned dataset
+    imported = import_titles(df, DB_PATH)
+    print(f"  SQLite database : {DB_PATH} ({imported:,} records synced)")
 
     # ---------------------------------------------------------------- #
     # Step 2 — Bloom Filter
@@ -110,11 +121,64 @@ def main():
     print(f"  Movie duration — mean: {md['mean']} min, median: {md['median']} min")
 
     # ---------------------------------------------------------------- #
-    # Step 5 — Visualisations
+    # Step 5 — Visualisations (via R / ggplot2)
     # ---------------------------------------------------------------- #
-    print_section(5, 'Generating visualisations')
-    fig_paths = generate_figures(analysis, FIGURES_DIR)
-    print(f"  {len(fig_paths)} figures saved to {FIGURES_DIR}/")
+    print_section(5, 'Generating visualisations (R / ggplot2)')
+    
+    # Save cleaned dataset for R to consume
+    df.to_csv(CLEANED_DATA_PATH, index=False)
+    print(f"  Exported cleaned dataset for R: {CLEANED_DATA_PATH}")
+
+    r_script_path = os.path.join('src', 'visualizations.R')
+    if not os.path.exists(RSCRIPT_PATH):
+        raise FileNotFoundError(f"Rscript executable not found at: {RSCRIPT_PATH}")
+    if not os.path.exists(r_script_path):
+        raise FileNotFoundError(f"R visualization script not found at: {r_script_path}")
+
+    cmd = [
+        RSCRIPT_PATH,
+        r_script_path,
+        CLEANED_DATA_PATH,
+        FIGURES_DIR
+    ]
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        if proc.stdout:
+            for line in proc.stdout.strip().splitlines():
+                print(f"  [R] {line}")
+    except subprocess.CalledProcessError as exc:
+        print(f"\n[ERROR] R script execution failed with exit code {exc.returncode}!")
+        if exc.stdout:
+            print(f"[R stdout]:\n{exc.stdout}")
+        if exc.stderr:
+            print(f"[R stderr]:\n{exc.stderr}", file=sys.stderr)
+        raise RuntimeError(f"Chart generation failed in R script: {exc}") from exc
+
+    fig_names = [
+        ('fig1', 'fig1_content_type.png'),
+        ('fig2', 'fig2_top_countries.png'),
+        ('fig3', 'fig3_top_genres.png'),
+        ('fig4', 'fig4_rating_distribution.png'),
+        ('fig5', 'fig5_release_year.png'),
+        ('fig6', 'fig6_added_over_time.png'),
+        ('fig7', 'fig7_movie_duration.png'),
+        ('fig8', 'fig8_tv_seasons.png'),
+    ]
+    fig_paths = {}
+    for key, filename in fig_names:
+        p = os.path.join(FIGURES_DIR, filename)
+        if not os.path.exists(p):
+            raise FileNotFoundError(f"Expected generated figure missing: {p}")
+        fig_paths[key] = p
+
+    print(f"  {len(fig_paths)} figures verified in {FIGURES_DIR}/")
 
     # ---------------------------------------------------------------- #
     # Step 6 — PDF Report
@@ -136,6 +200,7 @@ def main():
     print()
     print('=' * 60)
     print('  ALL DONE')
+    print(f'  Database: {DB_PATH}')
     print(f'  Figures : {FIGURES_DIR}/')
     print(f'  Report  : {REPORT_PATH}')
     print('=' * 60)
